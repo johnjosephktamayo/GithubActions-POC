@@ -1,0 +1,72 @@
+name: Count Days Between Years
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: 'Start Year'
+        required: false
+        default: '1901'
+      end_year:
+        description: 'End Year'
+        required: false
+        default: '2000'
+      days:
+        description: 'Days to Count (comma-separated)'
+        required: false
+        default: 'Sunday'
+
+jobs:
+  validate_input:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate start year
+        run: |
+          if [ ${{ inputs.start_year }} -le 1900 ]; then
+            echo "❌ Start year cannot be less than 1900!"
+            exit 1
+          fi
+          echo "✅ ${{ inputs.start_year }} can be used as a start year."
+
+      - name: Validate end year
+        run: |
+          if [ ${{ inputs.end_year }} -ge ${{ inputs.start_year }} ]; then
+            echo "✅ ${{ inputs.end_year }} can be used as an end year."
+          else
+            echo "❌ End year cannot be less than start year."
+            exit 1
+          fi
+
+  generate_counts:
+    needs: validate_input
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        day: ${{ fromJSON(format('["{0}"]', join(split(inputs.days, ','), '","'))) }}
+    steps:
+      - name: Count ${{ matrix.day }}s between ${{ inputs.start_year }} and ${{ inputs.end_year }}
+        run: |
+          counter=0
+          start=${{ inputs.start_year }}
+          end=${{ inputs.end_year }}
+          target_day=${{ matrix.day }}
+          output_file=${{ github.workspace }}/count_${{ matrix.day }}s.txt
+
+          touch $output_file
+
+          for year in $(seq $start $end); do
+            for month in $(seq 1 12); do
+              week_day=$(date -d "$year-$month-1" +'%A')
+              if [ "$week_day" == "$target_day" ]; then
+                ((counter++))
+              fi
+            done
+          done
+
+          echo "$target_day: $counter" > $output_file
+
+      - name: Upload ${{ matrix.day }} count as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.day }}
+          path: count_${{ matrix.day }}s.txt
