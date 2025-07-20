@@ -11,44 +11,54 @@ on:
         description: 'End Year'
         required: false
         default: '2000'
-      days:
-        description: 'Days to Count (comma-separated)'
-        required: false
-        default: 'Sunday'
+      sunday:
+        description: 'Count Sundays?'
+        type: boolean
+        default: true
+      monday:
+        description: 'Count Mondays?'
+        type: boolean
+        default: false
+      # Add other days as needed
 
 jobs:
   validate_input:
     runs-on: ubuntu-latest
+    outputs:
+      start_year: ${{ steps.set.outputs.start_year }}
+      end_year: ${{ steps.set.outputs.end_year }}
     steps:
-      - name: Validate start year
+      - name: Validate years
+        id: set
         run: |
-          if [ ${{ inputs.start_year }} -le 1900 ]; then
-            echo "❌ Start year cannot be less than 1900!"
+          start=${{ inputs.start_year }}
+          end=${{ inputs.end_year }}
+          if [ "$start" -le 1900 ]; then
+            echo "Start year cannot be less than 1900"
             exit 1
           fi
-          echo "✅ ${{ inputs.start_year }} can be used as a start year."
-
-      - name: Validate end year
-        run: |
-          if [ ${{ inputs.end_year }} -ge ${{ inputs.start_year }} ]; then
-            echo "✅ ${{ inputs.end_year }} can be used as an end year."
-          else
-            echo "❌ End year cannot be less than start year."
+          if [ "$end" -lt "$start" ]; then
+            echo "End year cannot be less than start year"
             exit 1
           fi
+          echo "start_year=$start" >> $GITHUB_OUTPUT
+          echo "end_year=$end" >> $GITHUB_OUTPUT
 
-  generate_counts:
+  count_days:
     needs: validate_input
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        day: ${{ fromJSON(format('["{0}"]', join(split(inputs.days, ','), '","'))) }}
+        day: [Sunday, Monday]
+    if: |
+      (matrix.day == 'Sunday' && inputs.sunday == 'true') ||
+      (matrix.day == 'Monday' && inputs.monday == 'true')
     steps:
-      - name: Count ${{ matrix.day }}s between ${{ inputs.start_year }} and ${{ inputs.end_year }}
+      - name: Count ${{ matrix.day }}s
         run: |
           counter=0
-          start=${{ inputs.start_year }}
-          end=${{ inputs.end_year }}
+          start=${{ needs.validate_input.outputs.start_year }}
+          end=${{ needs.validate_input.outputs.end_year }}
           target_day=${{ matrix.day }}
           output_file=${{ github.workspace }}/count_${{ matrix.day }}s.txt
 
@@ -65,7 +75,7 @@ jobs:
 
           echo "$target_day: $counter" > $output_file
 
-      - name: Upload ${{ matrix.day }} count as artifact
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.day }}
